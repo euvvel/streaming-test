@@ -1,0 +1,68 @@
+name: Streaming Feasibility Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  echo-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download cloudflared
+        run: |
+          curl -L https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o cloudflared
+          chmod +x cloudflared
+      
+      - name: Start echo server (background)
+        run: |
+          python3 echo_server.py &
+          sleep 2
+          echo "Echo server started on port 8080"
+      
+      - name: Start cloudflared tunnel
+        run: |
+          ./cloudflared tunnel --url http://localhost:8080 2>&1 | tee tunnel-url.txt &
+          
+          echo "Waiting for Cloudflare tunnel URL..."
+          for i in $(seq 1 30); do
+            if grep -q "trycloudflare.com" tunnel-url.txt 2>/dev/null; then
+              break
+            fi
+            sleep 1
+            echo "  Still waiting... ($i)"
+          done
+          
+          TUNNEL_URL=$(grep -o 'https://[a-z0-9.-]*\.trycloudflare\.com' tunnel-url.txt | head -1)
+          
+          echo ""
+          echo "=============================================="
+          echo ""
+          echo "  TUNNEL URL: $TUNNEL_URL"
+          echo ""
+          echo "=============================================="
+          echo ""
+          echo "1. Copy the URL above"
+          echo "2. Paste into ECHO_SERVER_URL in Apps Script Code.gs"
+          echo "3. Deploy Apps Script as Web App (Anyone can access)"
+          echo "4. Copy Apps Script deployment URL"
+          echo "5. Paste into test_client.py as GAS_URL"
+          echo "6. Run: python3 test_client.py"
+          echo "7. Run it 3 times for confidence"
+          echo "8. Cancel this workflow when done"
+          echo ""
+          echo "=============================================="
+      
+      - name: Keep alive
+        run: |
+          echo "Tunnel and echo server are running."
+          echo "You can run test_client.py now."
+          echo "Cancel this workflow on GitHub when finished."
+          echo ""
+          while true; do
+            sleep 30
+            echo "$(date): Server still running..."
+          done
